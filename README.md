@@ -1,16 +1,25 @@
-# EDR Project
+## Phase 4: Database Integration (PostgreSQL)
 
-A personal endpoint monitoring and threat detection platform.
+In this phase, the system was upgraded from in-memory storage to persistent database storage using PostgreSQL and SQLAlchemy.
 
-## Current Features
+### What changed
+- Added PostgreSQL database for telemetry storage
+- Replaced in-memory Python list with database table
+- Used SQLAlchemy ORM for models and session handling
+- Created a telemetry table to store system metrics
+- Updated FastAPI backend to save and fetch data from PostgreSQL
 
-- CPU monitoring
-- Memory monitoring
-- Disk monitoring
+### Architecture
+Agent → FastAPI → SQLAlchemy → PostgreSQL
 
-## Future Features
+### Stored Data
+Each telemetry record includes:
+- hostname
+- cpu_percent
+- memory_percent
+- disk_percent
 
-- Process monitoring
-- FastAPI backend
-- PostgreSQL storage
-- React dashboard
+### Result
+- Data is now persistent (survives restarts)
+- Historical telemetry can be queried
+- Backend is now closer to real-world monitoring systems
