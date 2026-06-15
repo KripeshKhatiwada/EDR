@@ -2,12 +2,14 @@ import psutil
 import json
 import requests
 import socket
+import time
 
 
 backend_url = "http://localhost:8000/telemetry"
 #collect system data
 
-data = {
+def collect_telemetry():
+     return  {
     "hostname": socket.gethostname(),
     "cpu_percent": psutil.cpu_percent(interval=1),
     "memory_percent": psutil.virtual_memory().percent,  
@@ -26,5 +28,8 @@ def send_telemetry(data):
         print(f"Error sending data: {e}")
 
 if __name__ == "__main__":
-        send_telemetry(data)
+        while True:
+            data = collect_telemetry()
+            send_telemetry(data)
+            time.sleep(10)  # send data every 60 seconds
 
