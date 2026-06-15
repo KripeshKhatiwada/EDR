@@ -31,5 +31,5 @@ if __name__ == "__main__":
         while True:
             data = collect_telemetry()
             send_telemetry(data)
-            time.sleep(10)  # send data every 60 seconds
+            time.sleep(10)  # send data every 10 seconds
 

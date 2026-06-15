@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from datetime import datetime   # we can use this to add timestamp to the telemetry but not now 
+from database import Base , engine, SessionLocal
+from models import TelemetryDB
 
 app = FastAPI()
 
@@ -10,7 +11,9 @@ class Telemetry(BaseModel):
     memory_percent: float        # data model how it should look like when we receive it from agent
     disk_percent: float
     
-telemetry_store=[]  # in-memory store  temp
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def root():
@@ -18,10 +21,36 @@ def root():
 
 @app.post("/telemetry")
 def receive_telemetry(data: Telemetry):
-    print(data)
-    telemetry_store.append(data.model_dump())
-    return {"message": "data received and running"}   # endpoint of this and check if it is working fine 
+    print("🔥 GOT REQUEST:", data)
+    db=SessionLocal()  # create a new database session
+    telemetry_data = TelemetryDB(
+        hostname=data.hostname,
+        cpu_percent=data.cpu_percent,
+        memory_percent=data.memory_percent,
+        disk_percent=data.disk_percent
+    )
+    db.add(telemetry_data)
+    db.commit()
+    db.close()
+    return {"message": "data received and saved"}   # endpoint of this and check if it is working fine
 
 @app.get("/telemetry")
 def get_telemetry():
-    return telemetry_store
+    db = SessionLocal()
+
+    records = db.query(TelemetryDB).all()
+
+    result = []
+
+    for record in records:
+        result.append({
+            "id": record.id,
+            "hostname": record.hostname,
+            "cpu_percent": record.cpu_percent,
+            "memory_percent": record.memory_percent,
+            "disk_percent": record.disk_percent
+        })
+
+    db.close()
+
+    return result
