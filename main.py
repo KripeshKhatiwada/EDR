@@ -1,8 +1,9 @@
 from fastapi import FastAPI , Depends
 from pydantic import BaseModel
 from database import Base , engine, SessionLocal
-from models import TelemetryDB, ProcessDB
+from models import TelemetryDB, ProcessDB, AlertDB
 from sqlalchemy.orm import Session
+from alerts import check_alerts
 
 app = FastAPI()
 
@@ -37,6 +38,7 @@ def root():
     return {"status": "EDR-Lite backend running"}
 
 @app.post("/telemetry")
+
 def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
     print("🔥 GOT REQUEST:", data)
     telemetry_data = TelemetryDB(
@@ -62,6 +64,20 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"Error processing process data: {e}")
             continue
+    db.commit()
+
+    alerts = check_alerts(data)   # running alert engine
+
+    for alert in alerts:
+        alert_row = AlertDB(
+            hostname=data.hostname,
+            alert_type=alert["type"],    #save any alerts
+            message=alert["message"],
+            severity=alert["severity"]
+        )
+        db.add(alert_row)
+        print("🚨 ALERT TRIGGERED:", alert["message"])
+
     db.commit()
     return {"message": "data received and saved"}   # endpoint of this and check if it is working fine
 

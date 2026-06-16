@@ -29,6 +29,9 @@ def collect_telemetry():
     "cpu_percent": psutil.cpu_percent(interval=None),
     "memory_percent": psutil.virtual_memory().percent,  
     "disk_percent": psutil.disk_usage('/').percent,
+    #"cpu_percent": 95,  # Simulated high CPU usage for testing
+    #"memory_percent": 90,  # Simulated memory usage
+   # "disk_percent": 95,  # Simulated disk usage
     "processes": collect_processes()
 }
 
