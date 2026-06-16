@@ -1,16 +1,24 @@
 from fastapi import FastAPI , Depends
 from pydantic import BaseModel
 from database import Base , engine, SessionLocal
-from models import TelemetryDB
+from models import TelemetryDB, ProcessDB
 from sqlalchemy.orm import Session
 
 app = FastAPI()
+
+class Process(BaseModel):
+    pid: int
+    name: str
+    cpu_percent: float
+    memory_percent: float
+
 
 class Telemetry(BaseModel):
     hostname: str
     cpu_percent: float
     memory_percent: float        # data model how it should look like when we receive it from agent
     disk_percent: float
+    processes: list[Process]
     
 
 def get_db():
@@ -39,7 +47,22 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
     )
     db.add(telemetry_data)
     db.commit()
-    # db.close()  # No need to close the session when using Depends
+    db.refresh(telemetry_data)
+    
+    for process in data.processes:
+        try:
+            process_row = ProcessDB(
+                hostname=data.hostname,
+                pid=process.pid,
+                process_name=process.name or "Unknown",
+                cpu_percent=process.cpu_percent or 0.0,
+                memory_percent=process.memory_percent or 0.0
+            )
+            db.add(process_row)
+        except Exception as e:
+            print(f"Error processing process data: {e}")
+            continue
+    db.commit()
     return {"message": "data received and saved"}   # endpoint of this and check if it is working fine
 
 @app.get("/telemetry")
@@ -60,6 +83,22 @@ def get_telemetry(db: Session = Depends(get_db)):
   
 
     return result
+
+@app.get("/processes")
+def get_processes(db: Session = Depends(get_db)):
+    records = db.query(ProcessDB).all()
+
+    return [
+        {
+            "id": r.id,
+            "hostname": r.hostname,
+            "pid": r.pid,
+            "process_name": r.process_name,
+            "cpu_percent": r.cpu_percent,
+            "memory_percent": r.memory_percent
+        }
+        for r in records
+    ]
 
 @app.get("/hosts")
 def get_hosts(db: Session = Depends(get_db)):

@@ -9,3 +9,14 @@ class TelemetryDB(Base):
     cpu_percent = Column(Float)
     memory_percent = Column(Float)
     disk_percent = Column(Float)
+
+
+class ProcessDB(Base):
+    __tablename__ = "processes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    hostname = Column(String)
+    pid = Column(Integer)
+    process_name = Column(String)
+    cpu_percent = Column(Float)
+    memory_percent = Column(Float)

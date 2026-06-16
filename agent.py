@@ -1,5 +1,5 @@
 import psutil
-import json
+import json            # probably will be used uhhh soon
 import requests
 import socket
 import time
@@ -7,17 +7,34 @@ import time
 
 backend_url = "http://localhost:8000/telemetry"
 #collect system data
+def collect_processes():
+    processes = []
+
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            processes.append({
+                "pid": proc.info['pid'],
+                "name": proc.info['name'],
+                "cpu_percent": proc.cpu_percent(interval=None),
+                "memory_percent": proc.memory_percent()
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    return processes
 
 def collect_telemetry():
      return  {
     "hostname": socket.gethostname(),
-    "cpu_percent": psutil.cpu_percent(interval=1),
+    "cpu_percent": psutil.cpu_percent(interval=None),
     "memory_percent": psutil.virtual_memory().percent,  
     "disk_percent": psutil.disk_usage('/').percent,
+    "processes": collect_processes()
 }
 
 #send data to backend
 def send_telemetry(data):
+
     try:
         response = requests.post(backend_url, json=data)
         if response.status_code in [200, 201]:
