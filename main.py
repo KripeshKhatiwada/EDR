@@ -40,7 +40,13 @@ def root():
 @app.post("/telemetry")
 
 def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
-    print("🔥 GOT REQUEST:", data)
+    print(
+    f"🔥 GOT REQUEST from {data.hostname} "
+    f"CPU={data.cpu_percent}% "
+    f"RAM={data.memory_percent}% "
+    f"DISK={data.disk_percent}% "
+    f"Processes={len(data.processes)}"
+        )
     telemetry_data = TelemetryDB(
         hostname=data.hostname,
         cpu_percent=data.cpu_percent,
