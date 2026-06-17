@@ -39,3 +39,10 @@ class PortDB(Base):
     hostname = Column(String)
     pid = Column(Integer)
     port = Column(Integer)
+
+class FailedLoginDB(Base):
+    __tablename__ = "failed_logins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    hostname = Column(String)
+    count = Column(Integer)

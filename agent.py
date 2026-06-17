@@ -25,6 +25,15 @@ def collect_processes():
 
     return processes
 
+def collect_failed_logins():
+    failed_logins = 0
+
+    with open("/var/log/auth.log") as f:
+        for line in f:
+            if "Failed password" in line:
+                failed_logins += 1
+
+    return failed_logins
 
 def collect_ports():
     ports = []
@@ -48,6 +57,9 @@ def collect_telemetry():
     "cpu_percent": psutil.cpu_percent(interval=None),
     "memory_percent": psutil.virtual_memory().percent,  
     "disk_percent": psutil.disk_usage('/').percent,
+    "failed_logins": {"count": collect_failed_logins()
+                      },                                   # to fit schema, we wrap it in a dict
+
     #"cpu_percent": 95,  # Simulated high CPU usage for testing
     #"memory_percent": 90,  # Simulated memory usage
     #"disk_percent": 95,  # Simulated disk usage
