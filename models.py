@@ -31,3 +31,11 @@ class AlertDB(Base):
     message = Column(String)
     severity = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class PortDB(Base):
+    __tablename__ = "ports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    hostname = Column(String)
+    pid = Column(Integer)
+    port = Column(Integer)

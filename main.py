@@ -1,7 +1,7 @@
 from fastapi import FastAPI , Depends
 from pydantic import BaseModel
 from database import Base , engine, SessionLocal
-from models import TelemetryDB, ProcessDB, AlertDB
+from models import PortDB, TelemetryDB, ProcessDB, AlertDB
 from sqlalchemy.orm import Session
 from alerts import check_alerts
 
@@ -13,6 +13,9 @@ class Process(BaseModel):
     cpu_percent: float
     memory_percent: float
 
+class Port(BaseModel):
+    pid: int | None = None
+    port: int
 
 class Telemetry(BaseModel):
     hostname: str
@@ -20,7 +23,7 @@ class Telemetry(BaseModel):
     memory_percent: float        # data model how it should look like when we receive it from agent
     disk_percent: float
     processes: list[Process]
-    
+    ports: list[Port]
 
 def get_db():
     db = SessionLocal()
@@ -45,7 +48,8 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
     f"CPU={data.cpu_percent}% "
     f"RAM={data.memory_percent}% "
     f"DISK={data.disk_percent}% "
-    f"Processes={len(data.processes)}"
+    f"Processes={len(data.processes)} "
+    f"Ports={len(data.ports)}"
         )
     telemetry_data = TelemetryDB(
         hostname=data.hostname,
@@ -71,6 +75,21 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
             print(f"Error processing process data: {e}")
             continue
     db.commit()
+
+    for port in data.ports:
+        try:
+            port_row = PortDB(
+                hostname=data.hostname,
+                pid=port.pid,
+                port=port.port
+            )
+            db.add(port_row)
+            db.commit()
+        except Exception as e:
+            print(f"Error processing port data: {e}")
+            continue
+
+
 
     alerts = check_alerts(data)   # running alert engine
 
@@ -121,6 +140,37 @@ def get_processes(db: Session = Depends(get_db)):
         }
         for r in records
     ]
+
+@app.get("/alerts")
+def get_alerts(db: Session = Depends(get_db)):
+    records = db.query(AlertDB).all()
+
+    return [
+        {
+            "id": r.id,
+            "hostname": r.hostname,
+            "alert_type": r.alert_type,
+            "message": r.message,
+            "severity": r.severity,
+            "created_at": r.created_at
+        }
+        for r in records
+    ]
+
+@app.get("/ports")
+def get_ports(db: Session = Depends(get_db)):
+    records = db.query(PortDB).all()
+
+    return [
+        {
+            "id": r.id,
+            "hostname": r.hostname,
+            "pid": r.pid,
+            "port": r.port
+        }
+        for r in records
+    ]
+
 
 @app.get("/hosts")
 def get_hosts(db: Session = Depends(get_db)):
