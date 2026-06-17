@@ -1,6 +1,8 @@
 def check_alerts(data):
     alerts = []
 
+    suspicious_ports = [4444, 5555, 1337]
+
     # CPU rule
     if data.cpu_percent > 80:
         alerts.append({
@@ -23,6 +25,23 @@ def check_alerts(data):
             "type": "DISK_HIGH",
             "message": f"Disk usage high: {data.disk_percent}%",
             "severity": "critical"
+        })
+
+    # Suspicious ports
+    for port in data.ports:
+        if port.port in suspicious_ports:
+            alerts.append({
+                "type": "SUSPICIOUS_PORT",
+                "message": f"Suspicious port detected: {port.port}",
+                "severity": "critical"
+            })
+
+    # Failed logins
+    if data.failed_logins > 10:
+        alerts.append({
+            "type": "FAILED_LOGINS",
+            "message": f"{data.failed_logins} failed login attempts",
+            "severity": "warning"
         })
 
     return alerts

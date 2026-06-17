@@ -1,5 +1,6 @@
+from importlib.resources import path
 from urllib import response
-
+import hashlib
 import psutil
 import json            # probably will be used uhhh soon
 import requests
@@ -9,6 +10,28 @@ import time
 
 backend_url = "http://localhost:8000/telemetry"
 #collect system data
+def collect_file_hashes():
+
+    def file_hash(path):
+        try:
+            with open(path, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+        except Exception:
+            return None
+
+    files = [
+        "/etc/passwd",
+        "/etc/hosts",
+        "file_integrety_check.txt"  
+    ]
+
+    hashes = {}
+
+    for file in files:
+        hashes[file] = file_hash(file)
+
+    return hashes
+
 def collect_processes():
     processes = []
 
@@ -57,9 +80,9 @@ def collect_telemetry():
     "cpu_percent": psutil.cpu_percent(interval=None),
     "memory_percent": psutil.virtual_memory().percent,  
     "disk_percent": psutil.disk_usage('/').percent,
-    "failed_logins": {"count": collect_failed_logins()
-                      },                                   # to fit schema, we wrap it in a dict
-
+    "failed_logins":collect_failed_logins(),
+   
+    "file_hashes": collect_file_hashes(),
     #"cpu_percent": 95,  # Simulated high CPU usage for testing
     #"memory_percent": 90,  # Simulated memory usage
     #"disk_percent": 95,  # Simulated disk usage

@@ -1,7 +1,7 @@
 from fastapi import FastAPI , Depends
 from pydantic import BaseModel
 from database import Base , engine, SessionLocal
-from models import FailedLoginDB, PortDB, TelemetryDB, ProcessDB, AlertDB
+from models import FailedLoginDB, PortDB, TelemetryDB, ProcessDB, AlertDB, FileHashDB
 from sqlalchemy.orm import Session
 from alerts import check_alerts
 
@@ -17,8 +17,6 @@ class Port(BaseModel):
     pid: int | None = None
     port: int
 
-class failed_login(BaseModel):
-    count: int | None = None
 
 class Telemetry(BaseModel):
     hostname: str
@@ -27,7 +25,8 @@ class Telemetry(BaseModel):
     disk_percent: float
     processes: list[Process]
     ports: list[Port]
-    failed_logins: failed_login
+    file_hashes: dict = {}      # placeholder for file hashes, can be expanded to a list of dicts if we want more details
+    failed_logins: int
 
 def get_db():
     db = SessionLocal()
@@ -56,7 +55,7 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
     f"DISK={data.disk_percent}% "
     f"Processes={len(data.processes)} "
     f"Ports={len(data.ports)}"
-    f"Failed Logins={data.failed_logins.count}"
+    f"Failed Logins={data.failed_logins}"
         )
     telemetry_data = TelemetryDB(
         hostname=data.hostname,
@@ -72,7 +71,7 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
 
     failed_login_data = FailedLoginDB(
         hostname=data.hostname,
-        count=data.failed_logins.count
+        count=data.failed_logins
     )
     db.add(failed_login_data)
     db.commit()
@@ -104,12 +103,49 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
                 port=port.port
             )
             db.add(port_row)
-            db.commit()
         except Exception as e:
             print(f"Error processing port data: {e}")
             continue
+        
 
+    for filepath, new_hash in data.file_hashes.items():
 
+        existing = (
+            db.query(FileHashDB)
+            .filter(
+                FileHashDB.hostname == data.hostname,
+                FileHashDB.file_path == filepath
+            )
+            .first()
+        )
+
+        if existing:
+
+            if existing.hash_value != new_hash:
+
+                alert_row = AlertDB(
+                    hostname=data.hostname,
+                    alert_type="FILE_MODIFIED",
+                    message=f"{filepath} was modified",
+                    severity="critical"
+                )
+
+                db.add(alert_row)
+
+                existing.hash_value = new_hash
+
+                print(f"🚨 FILE MODIFIED: {filepath}")
+
+        else:
+
+            file_row = FileHashDB(
+                hostname=data.hostname,
+                file_path=filepath,
+                hash_value=new_hash
+            )
+
+            db.add(file_row)
+    db.commit()
 
     alerts = check_alerts(data)   # running alert engine
 

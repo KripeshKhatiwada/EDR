@@ -46,3 +46,11 @@ class FailedLoginDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     hostname = Column(String)
     count = Column(Integer)
+
+class FileHashDB(Base):
+    __tablename__ = "file_hashes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    hostname = Column(String)
+    file_path = Column(String)
+    hash_value = Column(String)
