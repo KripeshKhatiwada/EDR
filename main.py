@@ -4,6 +4,7 @@ from database import Base , engine, SessionLocal
 from models import FailedLoginDB, PortDB, TelemetryDB, ProcessDB, AlertDB, FileHashDB
 from sqlalchemy.orm import Session
 from alerts import check_alerts
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
@@ -38,6 +39,14 @@ def get_db():
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
