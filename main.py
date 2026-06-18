@@ -227,6 +227,35 @@ def get_ports(db: Session = Depends(get_db)):
         for r in records
     ]
 
+@app.get("/failed_logins")
+def get_failed_logins(db: Session = Depends(get_db)):
+    records = db.query(FailedLoginDB).all()
+
+    return [
+        {
+            "id": r.id,
+            "hostname": r.hostname,
+            "username": r.username,
+            "ip_address": r.ip_address,
+            "timestamp": r.timestamp
+        }
+        for r in records
+    ]
+
+@app.get("/file_hashes")
+def get_file_hashes(db: Session = Depends(get_db)):
+    records = db.query(FileHashDB).all()
+
+    return [
+        {
+            "id": r.id,
+            "hostname": r.hostname,
+            "file_path": r.file_path,
+            "hash_value": r.hash_value
+        }
+        for r in records
+    ]
+
 
 @app.get("/hosts")
 def get_hosts(db: Session = Depends(get_db)):
@@ -235,7 +264,6 @@ def get_hosts(db: Session = Depends(get_db)):
         .distinct()
         .all()
     )
-
     return [host[0] for host in hosts]
 
 @app.get("/hosts/{hostname}")
