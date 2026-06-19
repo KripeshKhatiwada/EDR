@@ -1,0 +1,39 @@
+services:
+
+  db:
+    image: postgres:15
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: edr_lite
+
+    #ports:
+     # - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      - db
+
+    environment:
+      DATABASE_URL: postgresql://postgres:mypassword@db:5432/edr_lite
+
+  frontend:
+    build: ./dashboard
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

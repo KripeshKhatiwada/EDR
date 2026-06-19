@@ -1,8 +1,12 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "postgresql://postgres:mypassword@localhost/edr_lite"
-
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:mypassword@localhost/edr_lite"
+)
 engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(
