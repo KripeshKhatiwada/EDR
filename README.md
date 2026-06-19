@@ -1,3 +1,49 @@
+# 🛡️ EDR Lite – Endpoint Detection & Response System
+
+A lightweight **Endpoint Detection & Response (EDR)** system built using **FastAPI, React, PostgreSQL, and Docker**.
+
+This project simulates a real-world security monitoring pipeline that collects endpoint telemetry, detects basic anomalies, and visualizes system activity through a centralized dashboard.
+
+---
+
+# 🚀 Key Features
+
+## 🖥️ System Monitoring
+✔ CPU usage tracking  
+✔ Memory usage tracking  
+✔ Disk usage tracking  
+✔ Process monitoring  
+✔ Port monitoring  
+
+---
+
+## 🔐 Security Monitoring
+✔ File integrity monitoring (hash-based detection)  
+✔ Failed login tracking  
+✔ Basic security alert generation system  
+
+---
+
+## 📡 Data Pipeline
+✔ Real-time telemetry ingestion pipeline  
+✔ Agent → API → Database → Dashboard architecture  
+
+---
+
+# 🧠 Architecture
+
+```text id="arch1"
+[ Agent ]
+   ↓
+[ FastAPI Backend ]
+   ↓
+[ PostgreSQL Database ]
+   ↓
+[ React Dashboard ]
+
+
+
+
 # Deployment (Dockerized)
 
 The system is fully containerized using Docker Compose.
