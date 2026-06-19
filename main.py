@@ -1,12 +1,22 @@
-from fastapi import FastAPI , Depends
+from fastapi import FastAPI , Depends, HTTPException
 from pydantic import BaseModel
 from database import Base , engine, SessionLocal
 from models import FailedLoginDB, PortDB, TelemetryDB, ProcessDB, AlertDB, FileHashDB
 from sqlalchemy.orm import Session
 from alerts import check_alerts
 from fastapi.middleware.cors import CORSMiddleware
+from auth.auth import create_access_token, verify_token
 
 app = FastAPI()
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+FAKE_USER = {
+    "username": "admin",       # temp test
+    "password": "admin123"
+}
 
 class Process(BaseModel):
     pid: int
@@ -168,8 +178,30 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
     print("TELEMETRY SAVED")
     print("ID:", telemetry_data.id) # endpoint of this and check if it is working fine
 
+@app.post("/login")
+def login(data: LoginRequest):
+    if data.username != FAKE_USER["username"] or data.password != FAKE_USER["password"]:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token({"sub": data.username})
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+
+@app.get("/test-token")
+def test_token():
+    token = create_access_token({"user": "test"}) # just to test if token creation is working fine, we can remove this later
+    return {"access_token": token}
+
+
 @app.get("/telemetry")
-def get_telemetry(db: Session = Depends(get_db)):
+def get_telemetry(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token) 
+ ): # protect this route with token verification:
+
     records = (
         db.query(TelemetryDB)
         .order_by(TelemetryDB.id.desc())
@@ -193,7 +225,10 @@ def get_telemetry(db: Session = Depends(get_db)):
     return result
 
 @app.get("/processes")
-def get_processes(db: Session = Depends(get_db)):
+def get_processes(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     records = (
         db.query(ProcessDB)
         .order_by(ProcessDB.id.desc())
@@ -213,7 +248,10 @@ def get_processes(db: Session = Depends(get_db)):
     ]
 
 @app.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
+def get_alerts(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     records = (
         db.query(AlertDB)
         .order_by(AlertDB.id.desc())
@@ -234,7 +272,10 @@ def get_alerts(db: Session = Depends(get_db)):
     ]
 
 @app.get("/ports")
-def get_ports(db: Session = Depends(get_db)):
+def get_ports(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     records = (
         db.query(PortDB)
         .order_by(PortDB.id.desc())
@@ -253,7 +294,10 @@ def get_ports(db: Session = Depends(get_db)):
     ]
 
 @app.get("/failed_logins")
-def get_failed_logins(db: Session = Depends(get_db)):
+def get_failed_logins(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     records = (
         db.query(FailedLoginDB)
         .order_by(FailedLoginDB.id.desc())
@@ -271,7 +315,10 @@ def get_failed_logins(db: Session = Depends(get_db)):
     ]
 
 @app.get("/file_hashes")
-def get_file_hashes(db: Session = Depends(get_db)):
+def get_file_hashes(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     records = (
         db.query(FileHashDB)
         .order_by(FileHashDB.id.desc())
@@ -291,7 +338,10 @@ def get_file_hashes(db: Session = Depends(get_db)):
 
 
 @app.get("/hosts")
-def get_hosts(db: Session = Depends(get_db)):
+def get_hosts(
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
+):
     hosts = (
         db.query(TelemetryDB.hostname)
         .distinct()
@@ -302,7 +352,8 @@ def get_hosts(db: Session = Depends(get_db)):
 @app.get("/hosts/{hostname}")
 def get_host_telemetry(
     hostname: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user=Depends(verify_token)
 ):
     data = (
         db.query(TelemetryDB)
