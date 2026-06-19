@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import "./dashboard.css";
 
 function Dashboard() {
     const [telemetry, setTelemetry] = useState([]);
@@ -56,72 +57,86 @@ function Dashboard() {
     }, []);
 
     return (
-        <div>
-            <h1>EDR Dashboard</h1>
+    <div>
+
+        <h1>
+            EDR SECURITY DASHBOARD
+        </h1>
+
+      <div className="grid">
 
             {/* TELEMETRY */}
-            <h2>Telemetry</h2>
-            {telemetry.map(t => (
-                <div key={t.id}>
-                    <p>{t.hostname}</p>
-                    <p>CPU: {t.cpu_percent}%</p>
-                    <p>RAM: {t.memory_percent}%</p>
-                    <p>Disk: {t.disk_percent}%</p>
-                    <hr />
-                </div>
-            ))}
-
-            {/* PROCESSES */}
-            <h2>Processes</h2>
-            {processes.map(p => (
-                <div key={p.id}>
-                    <p>{p.process_name}</p>
-                    <p>CPU: {p.cpu_percent}%</p>
-                    <p>MEM: {p.memory_percent}%</p>
-                    <hr />
-                </div>
-            ))}
+            <div className="card">
+                <h2 >Telemetry</h2>
+                {telemetry.map(t => (
+                    <div key={t.id} className="item">
+                        <b>{t.hostname}</b>
+                        <br />
+                        CPU: {t.cpu_percent}% | RAM: {t.memory_percent}% | DISK: {t.disk_percent}%
+                    </div>
+                ))}
+            </div>
 
             {/* ALERTS */}
-            <h2>Alerts</h2>
-            {alerts.map(a => (
-                <div key={a.id}>
-                    <p>{a.alert_type}</p>
-                    <p>{a.message}</p>
-                    <p>{a.severity}</p>
-                    <hr />
-                </div>
-            ))}
+            <div className="card">
+                <h2 >Alerts</h2>
+                {alerts.map(a => (
+                    <div key={a.id} className="item alert">
+                        <b>{a.alert_type}</b>
+                        <br />
+                        {a.message}
+                        <br />
+                        <span>{a.severity}</span>
+                    </div>
+                ))}
+            </div>
+
+            {/* PROCESSES */}
+            <div className="card">
+                <h2 >Processes</h2>
+                {processes.map(p => (
+                    <div key={p.id} className="item">
+                        {p.process_name}
+                        <br />
+                        CPU: {p.cpu_percent}% | MEM: {p.memory_percent}%
+                    </div>
+                ))}
+            </div>
 
             {/* PORTS */}
-            <h2>Ports</h2>
-            {ports.map(p => (
-                <div key={p.id}>
-                    <p>Port: {p.port}</p>
-                    <p>PID: {p.pid ?? "N/A"}</p>
-                    <hr />
-                </div>
-            ))}
+            <div className="card">
+                <h2 >Ports</h2>
+                {ports.map(p => (
+                    <div key={p.id} className="item">
+                        Port: {p.port} | PID: {p.pid ?? "N/A"}
+                    </div>
+                ))}
+            </div>
 
             {/* FILE HASHES */}
-            <h2>File Hashes</h2>
-            {files.map(f => (
-                <div key={f.id}>
-                    <p>{f.file_path}</p>
-                    <p>{f.hash_value}</p>
-                    <hr />
-                </div>
-            ))}
+            <div className="card">
+                <h2 >File Hashes</h2>
+                {files.map(f => (
+                    <div key={f.id} className="item">
+                        <b>{f.file_path}</b>
+                        <br />
+                        <span className="small">{f.hash_value}</span>
+                    </div>
+                ))}
+            </div>
 
             {/* HOSTS */}
-            <h2>Hosts</h2>
-            {hosts.map((h, i) => (
-                <div key={i}>
-                    <p>{h}</p>
-                    <hr />
-                </div>
-            ))}
+            <div className="card">
+                <h2 >Hosts</h2>
+                {hosts.map((h, i) => (
+                    <div key={i} className="item">
+                        {h}
+                    </div>
+                ))}
+            </div>
+
         </div>
+    </div>
     );
 }
 
