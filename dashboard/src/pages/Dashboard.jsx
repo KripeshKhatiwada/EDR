@@ -14,42 +14,42 @@ function Dashboard() {
         api.get("http://127.0.0.1:8000/telemetry")
             .then((res) => {
                 console.log("TELEMETRY:", res.data);
-                setTelemetry(res.data.slice(-10).reverse());
+                setTelemetry(res.data);
             })
             .catch((err) => console.log(err));
 
         api.get("http://127.0.0.1:8000/processes")
             .then((res) => {
                 console.log("PROCESSES:", res.data);
-                setProcesses(res.data.slice(-10).reverse());
+                setProcesses(res.data);
             })
             .catch((err) => console.log(err));
 
         api.get("http://127.0.0.1:8000/alerts")
             .then((res) => {
                 console.log("ALERTS:", res.data);
-                setAlerts(res.data.slice(-10).reverse());
+                setAlerts(res.data);
             })
             .catch((err) => console.log(err));
 
         api.get("http://127.0.0.1:8000/ports")
             .then((res) => {
                 console.log("PORTS:", res.data);
-                setPorts(res.data.slice(-10).reverse());
+                setPorts(res.data);
             })
             .catch((err) => console.log(err));
 
         api.get("http://127.0.0.1:8000/file_hashes")
             .then((res) => {
                 console.log("FILES:", res.data);
-                setFiles(res.data.slice(-10).reverse());
+                setFiles(res.data);
             })
             .catch((err) => console.log(err));
 
         api.get("http://127.0.0.1:8000/hosts")
             .then((res) => {
                 console.log("HOSTS:", res.data);
-                setHosts(res.data.slice(-10).reverse());
+                setHosts(res.data);
             })
             .catch((err) => console.log(err));
 
@@ -98,7 +98,7 @@ function Dashboard() {
             {ports.map(p => (
                 <div key={p.id}>
                     <p>Port: {p.port}</p>
-                    <p>PID: {p.pid}</p>
+                    <p>PID: {p.pid ?? "N/A"}</p>
                     <hr />
                 </div>
             ))}

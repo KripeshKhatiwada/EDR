@@ -73,9 +73,6 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
         disk_percent=data.disk_percent
     )
     db.add(telemetry_data)
-    db.commit()
-    db.refresh(telemetry_data)
-
 
 
     failed_login_data = FailedLoginDB(
@@ -83,9 +80,6 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
         count=data.failed_logins
     )
     db.add(failed_login_data)
-    db.commit()
-    db.refresh(failed_login_data)
-
 
 
     for process in data.processes:
@@ -101,7 +95,6 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"Error processing process data: {e}")
             continue
-    db.commit()
 
 
     for port in data.ports:
@@ -112,6 +105,7 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
                 port=port.port
             )
             db.add(port_row)
+            
         except Exception as e:
             print(f"Error processing port data: {e}")
             continue
@@ -154,7 +148,7 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
             )
 
             db.add(file_row)
-    db.commit()
+    
 
     alerts = check_alerts(data)   # running alert engine
 
@@ -168,13 +162,21 @@ def receive_telemetry(data: Telemetry, db: Session = Depends(get_db)):
         db.add(alert_row)
         print("🚨 ALERT TRIGGERED:", alert["message"])
 
+    print("About to commit all changes")
     db.commit()
-    return {"message": "data received and saved"}   # endpoint of this and check if it is working fine
+    print("Commit successful") 
+    print("TELEMETRY SAVED")
+    print("ID:", telemetry_data.id) # endpoint of this and check if it is working fine
 
 @app.get("/telemetry")
 def get_telemetry(db: Session = Depends(get_db)):
-    records = db.query(TelemetryDB).all()
-
+    records = (
+        db.query(TelemetryDB)
+        .order_by(TelemetryDB.id.desc())
+        .limit(10)
+        .all()
+    )
+    
     result = []
 
     for record in records:
@@ -192,8 +194,12 @@ def get_telemetry(db: Session = Depends(get_db)):
 
 @app.get("/processes")
 def get_processes(db: Session = Depends(get_db)):
-    records = db.query(ProcessDB).all()
-
+    records = (
+        db.query(ProcessDB)
+        .order_by(ProcessDB.id.desc())
+        .limit(10)
+        .all()
+    )
     return [
         {
             "id": r.id,
@@ -208,7 +214,12 @@ def get_processes(db: Session = Depends(get_db)):
 
 @app.get("/alerts")
 def get_alerts(db: Session = Depends(get_db)):
-    records = db.query(AlertDB).all()
+    records = (
+        db.query(AlertDB)
+        .order_by(AlertDB.id.desc())
+        .limit(10)
+        .all()
+    )
 
     return [
         {
@@ -224,7 +235,12 @@ def get_alerts(db: Session = Depends(get_db)):
 
 @app.get("/ports")
 def get_ports(db: Session = Depends(get_db)):
-    records = db.query(PortDB).all()
+    records = (
+        db.query(PortDB)
+        .order_by(PortDB.id.desc())
+        .limit(10)
+        .all()
+    )
 
     return [
         {
@@ -238,22 +254,30 @@ def get_ports(db: Session = Depends(get_db)):
 
 @app.get("/failed_logins")
 def get_failed_logins(db: Session = Depends(get_db)):
-    records = db.query(FailedLoginDB).all()
+    records = (
+        db.query(FailedLoginDB)
+        .order_by(FailedLoginDB.id.desc())
+        .limit(10)
+        .all()
+    )
 
     return [
         {
             "id": r.id,
             "hostname": r.hostname,
-            "username": r.username,
-            "ip_address": r.ip_address,
-            "timestamp": r.timestamp
+            "count": r.count,
         }
         for r in records
     ]
 
 @app.get("/file_hashes")
 def get_file_hashes(db: Session = Depends(get_db)):
-    records = db.query(FileHashDB).all()
+    records = (
+        db.query(FileHashDB)
+        .order_by(FileHashDB.id.desc())
+        .limit(10)
+        .all()
+    )
 
     return [
         {
