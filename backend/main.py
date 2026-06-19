@@ -5,7 +5,7 @@ from models import FailedLoginDB, PortDB, TelemetryDB, ProcessDB, AlertDB, FileH
 from sqlalchemy.orm import Session
 from alerts import check_alerts
 from fastapi.middleware.cors import CORSMiddleware
-from backend.auth.auth import create_access_token, verify_token
+from auth.auth import create_access_token, verify_token
 
 app = FastAPI()
 
