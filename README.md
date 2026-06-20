@@ -118,9 +118,35 @@ EDR/
 ├── screenshots/
 └── docker-compose.yml
 ```
+## Screenshots
 
+   ### System Dashboard
+   ![EDR Dashboard](screenshots/react_app_UI.png)
+
+   ### Alert Detection in Action
+   ![File Modified Alert](screenshots/file_modified_alert.png)
+
+   ### Backend Telemetry Collection
+   ![API Running](screenshots/api_running.png)
+
+   ### Full Stack Running
+   ![Docker Running](screenshots/docker_running.png)
 ---
 
+
+## Quick Start
+
+```bash
+   git clone https://github.com/KripeshKhatiwada/EDR.git
+   cd EDR
+   docker-compose up --build
+```
+   
+   - Dashboard: http://localhost:3000
+   - API Docs: http://localhost:8000/docs
+   - Run agent on another terminal: python agent.py
+
+   
 # Author
 
 Built by **Kripesh Khatiwada**  
