@@ -10,8 +10,26 @@ function Login({ onLogin }) {
             username,
             password
         }).then((res) => {
-            localStorage.setItem("token", res.data.access_token);
+              // store token
+            const token = res.data.access_token;
+            
+            localStorage.setItem("token", token);
+
+            // store expiry time (200 minutes)
+            const expiresAt = Date.now() + 200 * 60 * 1000;
+            localStorage.setItem("expiresAt", expiresAt);
+
+             // auto logout timer
+            setTimeout(() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("expiresAt");
+                window.location.href = "/"; // force back to login
+            }, 200 * 60 * 1000);
+
+
+
             onLogin();
+
         }).catch(() => {
             alert("Login failed");
         });
