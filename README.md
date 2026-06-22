@@ -1,302 +1,480 @@
-# 🛡️ EDR Lite – Endpoint Detection & Response System
+# EDR Lite – Endpoint Detection & Response System
 
-A **full-stack Endpoint Detection & Response (EDR)** system that collects endpoint telemetry in real-time, detects security anomalies, and visualizes system activity through a centralized web dashboard.
+A full-stack endpoint detection and response (EDR) system that collects real-time system telemetry from monitored hosts, applies rule-based threat detection, and provides a centralized dashboard for security monitoring.
 
-Built with **Python (FastAPI)**, **React**, **PostgreSQL**, and **Docker**.
-
----
-
-## 🎯 Overview
-
-EDR Lite is a learning/portfolio project that simulates a real-world security monitoring pipeline. An agent runs on monitored hosts, collecting system metrics and security events. The backend ingests, stores, and analyzes this data. The dashboard provides real-time visibility into endpoint activity.
-
-**This is not production-grade software.** See [Limitations](#limitations) below.
+**Status:** Fully functional prototype. Not production-grade. 
 
 ---
 
-## 🚀 Key Features
+## What This Project Does
 
-### 📡 Real-Time Telemetry Collection
-- **System Metrics**: CPU, memory, disk usage (captured every 5 seconds)
-- **Process Monitoring**: Running processes with PID, name, CPU%, memory%
-- **Port Monitoring**: Listening and established connections
-- **File Integrity Monitoring**: SHA256 hashes of critical system files
-- **Security Events**: Failed login attempts from system logs
+**In plain terms:**
 
-### 🔐 Security Detection
-- **File Modification Detection** — Alerts when monitored file hashes change (e.g., `/etc/passwd`, `/etc/hosts`, critical binaries)
-- **Resource Anomaly Detection** — Alerts on CPU/memory/disk spikes above configurable thresholds
-- **Failed Login Tracking** — Detects brute-force attempts (5+ failed logins in 60 seconds)
+1. An agent runs on a monitored Linux host
+2. Every needed(5 or 10) seconds, it collects: CPU, memory, disk, running processes, open ports, file hashes, failed logins
+3. It POSTs this data (JSON) to a FastAPI backend
+4. The backend stores it in PostgreSQL and applies detection rules
+5. A React dashboard polls the API and displays alerts + telemetry in real-time
 
-### 📊 Centralized Dashboard
-- Real-time telemetry visualization (CPU, memory, disk charts)
-- Process list with resource consumption
-- Active port monitoring
-- File hash tracking
-- Security alert log with severity levels
-- Multi-host support
-
-### 🐳 Full Docker Stack
-- Containerized backend (FastAPI)
-- Containerized frontend (React/Nginx)
-- PostgreSQL database
-- One-command deployment: `docker-compose up --build`
+**Why it matters:** Understanding how endpoint monitoring works and what data to collect, how to detect anomalies, how to centralize visibility is core blue team work.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-### Data Pipeline
+### High Level Data Flow
 
 ```
-Agent (runs on monitored host)
-  ↓ (collects telemetry)
-POST /telemetry (JSON payload)
-  ↓
-FastAPI Backend (validates, stores, analyzes)
-  ↓ (stores in PostgreSQL)
-PostgreSQL Database
-  ↓
-React Dashboard (polls /alerts, /telemetry, /processes)
-  ↓
-Browser (real-time display)
+┌─────────────────────────────────────────────────────────────┐
+│ AGENT (Python, Linux-only)                                  │
+│ ├─ Collects system metrics (CPU, memory, disk %)            │
+│ ├─ Parses running processes from `ps aux`                  │
+│ ├─ Parses open ports from `netstat`                        │
+│ ├─ Computes SHA256 hashes of monitored files               │
+│ └─ Scrapes failed login count from `/var/log/auth.log`     │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ POST /telemetry (JSON, every 5 sec)
+                   ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASTAPI BACKEND (Python, Port 8000)                         │
+│ ├─ Validates incoming JSON (Pydantic models)               │
+│ ├─ Stores hosts, telemetry snapshots, processes, ports     │
+│ ├─ Applies detection rules:                                 │
+│ │  - File hash changes → FILE_MODIFIED alert               │
+│ │  - CPU > 90% → CPU_HIGH alert                            │
+│ │  - Memory > 90% → MEMORY_HIGH alert                      │
+│ ├─ Exposes REST API (/telemetry, /alerts, /processes, etc)│
+│ └─ Generates JWT tokens for auth (basic)                   │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ SQL queries
+                   ↓
+┌─────────────────────────────────────────────────────────────┐
+│ POSTGRESQL DATABASE (Port 5432)                             │
+│ ├─ hosts: hostname, IP, last_seen                          │
+│ ├─ telemetry: host_id, cpu_percent, memory_percent, etc    │
+│ ├─ processes: host_id, pid, name, cpu%, memory%            │
+│ ├─ ports: host_id, port, state (LISTEN/ESTABLISHED)       │
+│ ├─ file_hashes: host_id, filepath, hash                    │
+│ └─ alerts: host_id, alert_type, severity, details          │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ HTTP GET requests
+                   ↓
+┌─────────────────────────────────────────────────────────────┐
+│ REACT DASHBOARD (Port 3000)                                 │
+│ ├─ Polls API every 2-5 seconds                             │
+│ ├─ Displays telemetry panels (CPU, memory, disk charts)    │
+│ ├─ Displays alerts with color-coding (red=critical, etc)   │
+│ ├─ Shows process list with resource usage                  │
+│ ├─ Shows open ports and their states                       │
+│ └─ Shows monitored file hashes                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Agent
+---
 
-**Runs as a Python script on monitored hosts.**
+## Implementation Details
 
-Collects every 5 seconds:
-- CPU usage (overall %)
-- Memory usage (% of total)
-- Disk usage (% of total)
-- Process list: `ps aux` parsed into {pid, name, cpu%, memory%}
-- Open ports: `netstat` parsed into {port, state}
-- File hashes: SHA256 of `/etc/passwd`, `/etc/hosts`, monitored binaries
-- Failed logins: Parsed from `/var/log/auth.log` (failed SSH attempts)
+### Agent (agent.py)
 
-Sends as JSON POST to `http://backend:8000/telemetry`:
-```json
+**What it collects, exactly:**
+
+```python
 {
   "hostname": "kripesh-IdeaPad",
   "timestamp": "2026-06-20T16:34:22Z",
-  "cpu_percent": 12.5,
-  "memory_percent": 48.3,
-  "disk_percent": 16.1,
+  "cpu_percent": 12.5,           # Overall CPU usage
+  "memory_percent": 48.3,         # RAM usage
+  "disk_percent": 16.1,           # Root filesystem usage
   "processes": [
-    {"pid": 1, "name": "systemd", "cpu_percent": 0, "memory_percent": 0.2},
-    {"pid": 455, "name": "agent.py", "cpu_percent": 2.1, "memory_percent": 1.5}
+    {
+      "pid": 1,
+      "name": "systemd",
+      "cpu_percent": 0,
+      "memory_percent": 0.21
+    },
+    {
+      "pid": 455,
+      "name": "agent.py",
+      "cpu_percent": 2.1,
+      "memory_percent": 1.5
+    }
   ],
   "ports": [
-    {"port": 22, "state": "LISTEN"},
-    {"port": 8000, "state": "LISTEN"}
+    {
+      "port": 22,
+      "state": "LISTEN"
+    },
+    {
+      "port": 8000,
+      "state": "LISTEN"
+    }
   ],
   "file_hashes": {
-    "/etc/passwd": "529d4776510d5ac8075640c8c41a19f29cabce0026...",
+    "/etc/passwd": "529d4776510d5ac8075640c8c41a19f29cabce0026268ae",
     "/etc/hosts": "39efcd28d49b93..."
   },
   "failed_logins": 0
 }
 ```
 
-### Backend (FastAPI)
+**Collection interval:** Every 5 seconds (hardcoded, configurable in code)
 
-**HTTP API that receives, validates, stores, and analyzes telemetry.**
+**How it collects:**
 
-#### Endpoints
+| Data | Source | Method |
+|------|--------|--------|
+| CPU, memory, disk | `/proc/stat`, `psutil` | Read system files |
+| Processes | `ps aux` output | Parse stdout |
+| Open ports | `netstat -tuln` output | Parse stdout |
+| File hashes | Direct file read | SHA256 hash |
+| Failed logins | `/var/log/auth.log` | Grep for "Failed password" |
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/telemetry` | POST | Receive agent telemetry (validated with Pydantic) |
-| `/telemetry` | GET | Retrieve latest telemetry for all hosts |
-| `/alerts` | GET | Retrieve triggered security alerts |
-| `/processes` | GET | Retrieve process list for a host |
-| `/ports` | GET | Retrieve open ports for a host |
-| `/file_hashes` | GET | Retrieve monitored file hashes |
-| `/hosts` | GET | List all monitored hosts |
-| `/docs` | GET | Interactive API documentation (Swagger UI) |
-
-#### Detection Rules
-
-**File Modification:**
-- On each telemetry, compare incoming file hashes with baseline
-- If hash mismatch: trigger `FILE_MODIFIED` alert with severity `critical`
-
-**Resource Anomaly:**
-- If `cpu_percent > 90%`: trigger `CPU_HIGH` alert with severity `warning`
-- If `memory_percent > 90%`: trigger `MEMORY_HIGH` alert with severity `warning`
-- If `disk_percent > 90%`: trigger `DISK_HIGH` alert with severity `critical`
-
-**Brute Force:**
-- If `failed_logins > 5` in last 60 seconds: trigger `BRUTE_FORCE_ATTEMPT` alert with severity `warning`
-
-### Database (PostgreSQL)
-
-**Stores all telemetry and alerts.**
-
-#### Schema
-
-```sql
-hosts
-  id (PK)
-  hostname (UNIQUE)
-  ip_address
-  last_seen (timestamp)
-
-telemetry
-  id (PK)
-  host_id (FK → hosts)
-  timestamp
-  cpu_percent
-  memory_percent
-  disk_percent
-  processes_count
-
-processes
-  id (PK)
-  host_id (FK → hosts)
-  timestamp
-  pid
-  name
-  cpu_percent
-  memory_percent
-
-ports
-  id (PK)
-  host_id (FK → hosts)
-  timestamp
-  port
-  state (LISTEN | ESTABLISHED)
-  service
-
-file_hashes
-  id (PK)
-  host_id (FK → hosts)
-  timestamp
-  filepath
-  hash (SHA256)
-
-alerts
-  id (PK)
-  host_id (FK → hosts)
-  timestamp
-  alert_type (FILE_MODIFIED | CPU_HIGH | MEMORY_HIGH | DISK_HIGH | BRUTE_FORCE_ATTEMPT)
-  details (human-readable description)
-  severity (critical | warning | info)
-```
-
-### Dashboard (React)
-
-**Web UI for security analysts to monitor endpoints.**
-
-Real-time visualization:
-- **Telemetry Panel**: Latest CPU, memory, disk for each host
-- **Alerts Panel**: Security alerts with severity color-coding (red=critical, orange=warning)
-- **Processes Panel**: Top resource-consuming processes
-- **Ports Panel**: Listening and established connections
-- **File Hashes Panel**: Monitored files and their hashes
-- **Hosts Panel**: List of all monitored endpoints
-
-Updates via polling (every 2-5 seconds):
-```javascript
-// Poll for alerts
-GET /alerts → Update alerts panel
-
-// Poll for telemetry
-GET /telemetry → Update CPU/memory/disk charts
-
-// Poll for processes
-GET /processes → Update process list
-```
+**Delivery:** HTTP POST to `http://backend:8000/telemetry` with JSON body. Expects 200 response.
 
 ---
 
-## ⚙️ Setup & Deployment
+### Backend (FastAPI)
+
+**Receives JSON from agent → Validates → Stores → Detects anomalies**
+
+#### Data Validation
+
+Uses Pydantic models. Example:
+
+```python
+class Process(BaseModel):
+    pid: int
+    name: str
+    cpu_percent: float
+    memory_percent: float
+
+class TelemetryPayload(BaseModel):
+    hostname: str
+    timestamp: str
+    cpu_percent: float
+    memory_percent: float
+    disk_percent: float
+    processes: List[Process]
+    ports: List[Dict]
+    file_hashes: Dict[str, str]
+    failed_logins: int
+```
+
+Invalid JSON is rejected with 400 error.
+
+#### Storage
+
+On each telemetry POST:
+
+1. **Lookup or create host record** in `hosts` table
+2. **Store telemetry snapshot** in `telemetry` table
+3. **Upsert process list** in `processes` table (pid + name + usage metrics)
+4. **Upsert port list** in `ports` table
+5. **Upsert file hashes** in `file_hashes` table
+6. **Apply detection rules** → Create alerts in `alerts` table if triggered
+
+#### Detection Rules (Hard-Coded Thresholds)
+
+**File Modification Rule:**
+- On each POST, compare incoming file hashes against **previous baseline** (last known hash for each file)
+- If `hash["/etc/passwd"] != baseline["/etc/passwd"]` → Create `FILE_MODIFIED` alert with severity `critical`
+- Details: `"/etc/passwd has changed from [old hash] to [new hash]"`
+
+**CPU High:**
+- If `cpu_percent > 90` → Create `CPU_HIGH` alert with severity `warning`
+- Details: `"CPU usage high: 95.0%"`
+
+**Memory High:**
+- If `memory_percent > 90` → Create `MEMORY_HIGH` alert with severity `warning`
+
+**Disk High:**
+- If `disk_percent > 90` → Create `DISK_HIGH` alert with severity `critical`
+
+**Brute Force (Failed Logins):**
+- If `failed_logins > 5` within a rolling 60-second window → Create `BRUTE_FORCE_ATTEMPT` alert with severity `warning`
+- Details: `"5+ failed SSH logins detected"`
+
+#### API Endpoints
+
+| Endpoint | Method | Returns |
+|----------|--------|---------|
+| `/telemetry` | POST | `{"status": "received"}` (stores data) |
+| `/telemetry` | GET | Latest telemetry for all hosts |
+| `/alerts` | GET | All alerts (newest first), paginated |
+| `/processes` | GET | Process list for a specific host |
+| `/ports` | GET | Port list for a specific host |
+| `/file_hashes` | GET | File hashes for a specific host |
+| `/hosts` | GET | List all monitored hosts |
+| `/docs` | GET | Swagger UI (interactive API documentation) |
+
+---
+
+### Database (PostgreSQL)
+
+**Complete schema:**
+
+```sql
+CREATE TABLE hosts (
+  id SERIAL PRIMARY KEY,
+  hostname VARCHAR(255) UNIQUE NOT NULL,
+  ip_address VARCHAR(45),
+  last_seen TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE telemetry (
+  id SERIAL PRIMARY KEY,
+  host_id INTEGER REFERENCES hosts(id),
+  timestamp TIMESTAMP NOT NULL,
+  cpu_percent FLOAT,
+  memory_percent FLOAT,
+  disk_percent FLOAT,
+  processes_count INTEGER
+);
+
+CREATE TABLE processes (
+  id SERIAL PRIMARY KEY,
+  host_id INTEGER REFERENCES hosts(id),
+  timestamp TIMESTAMP NOT NULL,
+  pid INTEGER,
+  name VARCHAR(255),
+  cpu_percent FLOAT,
+  memory_percent FLOAT
+);
+
+CREATE TABLE ports (
+  id SERIAL PRIMARY KEY,
+  host_id INTEGER REFERENCES hosts(id),
+  timestamp TIMESTAMP NOT NULL,
+  port INTEGER,
+  state VARCHAR(50),
+  service VARCHAR(255)
+);
+
+CREATE TABLE file_hashes (
+  id SERIAL PRIMARY KEY,
+  host_id INTEGER REFERENCES hosts(id),
+  timestamp TIMESTAMP NOT NULL,
+  filepath VARCHAR(500),
+  hash VARCHAR(64)
+);
+
+CREATE TABLE alerts (
+  id SERIAL PRIMARY KEY,
+  host_id INTEGER REFERENCES hosts(id),
+  timestamp TIMESTAMP NOT NULL,
+  alert_type VARCHAR(50),
+  details TEXT,
+  severity VARCHAR(20)
+);
+```
+
+
+---
+
+### Dashboard (React)
+
+**Renders:**
+
+1. **Telemetry Panel** — Shows latest CPU, memory, disk for each host
+2. **Alerts Panel** — Lists alerts; color-coded by severity
+3. **Processes Panel** — Top resource-consuming processes
+4. **Ports Panel** — Active listening and established connections
+5. **File Hashes Panel** — Monitored files and their current hashes
+
+**Update mechanism:** Polling. Every 2-5 seconds, dashboard calls `GET /alerts`, `GET /telemetry`, etc. and re-renders.
+
+---
+
+## Implementation Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Agent telemetry collection | ✅ Full | CPU, memory, disk, processes, ports, file hashes, failed logins all working |
+| Agent → Backend transmission | ✅ Full | HTTP POST with JSON; error handling included |
+| Backend data validation | ✅ Full | Pydantic models reject invalid input |
+| Backend data storage | ✅ Full | All data persisted to PostgreSQL |
+| File modification detection | ✅ Full | Compares hashes, creates alerts, tested |
+| Resource anomaly detection | ✅ Full | CPU/memory/disk thresholds; tested |
+| Failed login detection | ✅ Full | Parses auth.log, counts; tested |
+| Alert generation | ✅ Full | Alerts stored in DB with severity levels |
+| Dashboard display | ✅ Full | All panels render; real data shown in screenshots |
+| API endpoints | ✅ Full | All endpoints implemented; Swagger UI working |
+| Docker Compose setup | ✅ Full | One-command deployment; all services containerized |
+| Authentication | ⚠️ Partial | JWT tokens generated but not strictly enforced |
+| Multi-host management | ⚠️ Partial | Schema supports it; tested with single agent |
+
+---
+
+## How to Run It
 
 ### Prerequisites
-- Docker & Docker Compose
-- Python 3.9+ (for running agent locally)
-- Linux/macOS (agent collects from `ps`, `netstat`, `/var/log/auth.log`)
+
+- **Docker & Docker Compose** (backend, database, frontend)
+- **Python 3.9+** (agent, if running locally)
+- **Linux/macOS** (agent uses `ps`, `netstat`, `/var/log/auth.log`)
 
 ### Quick Start
 
 ```bash
+# Clone and navigate
 git clone https://github.com/KripeshKhatiwada/EDR.git
 cd EDR
 
 # Start the full stack
 docker-compose up --build
+```
 
-# In another terminal, run the agent
+**Expected output (Terminal 1):**
+
+```
+backend-1     | INFO:     Uvicorn running on http://0.0.0.0:8000
+backend-1     | INFO:     Application startup complete
+frontend-1    | [vite] ... ready in 234ms
+```
+
+**In another terminal, run the agent:**
+
+```bash
 python agent.py
 ```
 
-**What you should see:**
+**Expected output (Terminal 2):**
 
-Terminal 1 (Docker):
-```
-backend-1   | INFO:     Uvicorn running on http://0.0.0.0:8000
-backend-1   | INFO:     Application startup complete
-frontend-1  | [vite] ... ready in XXX ms
-```
-
-Terminal 2 (Agent):
 ```
 [Agent] Collecting telemetry...
 [Agent] POST /telemetry → 200 OK
 [Agent] Data sent successfully
 [Agent] Waiting 5 seconds...
+[Agent] Collecting telemetry...
+...
 ```
 
-### Access
+### Access Points
 
-- **Dashboard**: http://localhost:3000
-- **API Docs**: http://localhost:8000/docs (Swagger UI)
-- **Database**: `postgresql://postgres:postgres@localhost:5432/edr`
+- **Dashboard:** http://localhost:3000 (React app)
+- **API Docs:** http://localhost:8000/docs (Swagger UI)
+- **Database:** `postgresql://postgres:postgres@localhost:5432/edr_lite
 
 ---
 
-## 🖼️ Screenshots
+## Real-World Workflow
 
-### System Dashboard
-![EDR Dashboard](screenshots/react_app_UI.png)
-Central dashboard showing telemetry, alerts, processes, ports, and file hashes for all monitored hosts.
+### Step 1: Start the stack and agent
 
-### Alert Detection in Action
-![File Modified Alert](screenshots/file_modified_alert.png)
-Real-time alert when a monitored file (`file_integrity_check.txt`) is modified. Dashboard shows alert type, details, and severity.
+```bash
+# Terminal 1
+docker-compose up --build
 
-### Telemetry Data
-![Telemetry Table](screenshots/telemetry_table.png)
-System metrics collected from the monitored host (CPU, memory, disk usage over time).
+# Terminal 2 (after backend starts)
+python agent.py
+```
 
-### Process Monitoring
-![Process Table](screenshots/process_table.png)
-List of running processes with resource consumption (PID, process name, CPU%, memory%).
+### Step 2: Open the dashboard
 
-### Alerts Log
-![Alerts Table](screenshots/alerts_table.png)
-Security alert log with timestamps, types, and severity levels.
+Navigate to http://localhost:3000. You should see:
+- Real-time CPU, memory, disk metrics
+- Process list with resource usage
+- Open ports
+- Empty alerts panel (no anomalies yet)
 
-### Backend Telemetry Collection
+### Step 3: Trigger a file modification alert
+
+```bash
+# In a third terminal, modify a monitored file
+sudo touch /etc/passwd
+```
+
+**Result:** Within 5-10 seconds, the dashboard shows a new `FILE_MODIFIED` alert (red, critical).
+
+### Step 4: Trigger a resource anomaly alert
+
+```bash
+# Spike CPU usage
+stress --cpu 1 --timeout 30s
+# (install with: apt install stress)
+```
+
+**Result:** Within 5-10 seconds, `CPU_HIGH` alert appears in the dashboard.
+
+### Step 5: Verify in the database
+
+```bash
+# Check stored telemetry
+docker exec edr-postgres-1 psql -U postgres -d edr -c "SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 5;"
+```
+
+**Expected output:**
+
+```
+id | host_id | timestamp | alert_type | details | severity
+---|---------|-----------|------------|---------|----------
+1  | 1       | 2026-06-20 16:34:22 | FILE_MODIFIED | /etc/passwd changed | critical
+2  | 1       | 2026-06-20 16:34:35 | CPU_HIGH | CPU: 95.3% | warning
+```
+
+---
+
+## Screenshots
+
+### Screenshot 1: API Backend Running + Agent Collecting
+
 ![API Running](screenshots/api_running.png)
-FastAPI backend receiving telemetry POST requests and agent sending data successfully.
 
-### Full Stack Running
+Left: FastAPI backend running on port 8000, ready to receive telemetry.
+Right: Agent successfully sending telemetry every 5 seconds with "Data sent successfully" confirmation.
+
+### Screenshot 2: Docker Compose Full Stack
+
 ![Docker Running](screenshots/docker_running.png)
-Docker Compose with all services running (backend, frontend, database).
+
+All three services running: backend, frontend (Nginx), PostgreSQL. Ready for dashboard access.
+
+### Screenshot 3: Dashboard Main View
+
+![EDR Dashboard](screenshots/react_app_UI.png)
+
+Central dashboard showing:
+- **Telemetry panel** (left): Real-time CPU, memory, disk for each monitored host
+- **Alerts panel** (center): Security alerts with color-coding
+- **Ports panel** (bottom-left): Listening ports and their PIDs
+- **Processes panel** (right): Running processes with CPU/memory
+- **File Hashes panel** (bottom): Monitored files and their SHA256 hashes
+
+### Screenshot 4: File Modification Alert
+
+![File Modified Alert](screenshots/file_modified_alert.png)
+
+Dashboard showing an active FILE_MODIFIED alert. When `/etc/passwd` hash changed, the system generated an alert with severity "critical" and timestamp.
+
+### Screenshot 5: Telemetry Table
+
+![Telemetry Table](screenshots/telemetry_table.png)
+
+Raw telemetry data from the database. Each row is a snapshot from one collection cycle: hostname, CPU%, memory%, disk%, timestamp.
+
+### Screenshot 6: Process Monitoring
+
+![Process Table](screenshots/process_table.png)
+
+Process list with resource usage: PID, process name, CPU%, memory%. Shows that the agent itself is running and consuming system resources.
+
+### Screenshot 7: Alerts Log
+
+![Alerts Table](screenshots/alerts_table.png)
+
+Alert history. Each row is a triggered alert with type, severity, details, and timestamp. Shows the system successfully detecting anomalies.
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
-### Agent Configuration
+### Agent
 
 Edit `agent.py`:
 
 ```python
 TARGET_URL = "http://localhost:8000"  # Backend URL
-COLLECTION_INTERVAL = 5  # Seconds between telemetry collections
+COLLECTION_INTERVAL = 5               # Seconds between collections
 MONITORED_FILES = [
     "/etc/passwd",
     "/etc/hosts",
@@ -304,20 +482,19 @@ MONITORED_FILES = [
 ]
 ```
 
-### Backend Configuration
+### Backend
 
 Edit `backend/main.py`:
 
 ```python
-# Detection thresholds
-CPU_THRESHOLD = 90  # %
-MEMORY_THRESHOLD = 90  # %
-DISK_THRESHOLD = 90  # %
-FAILED_LOGIN_THRESHOLD = 5  # Count
-FAILED_LOGIN_WINDOW = 60  # Seconds
+CPU_THRESHOLD = 90      # Percentage
+MEMORY_THRESHOLD = 90   # Percentage
+DISK_THRESHOLD = 90     # Percentage
+FAILED_LOGIN_THRESHOLD = 5   # Count
+FAILED_LOGIN_WINDOW = 60     # Seconds
 ```
 
-### Database Configuration
+### Database
 
 Edit `docker-compose.yml`:
 
@@ -330,126 +507,43 @@ environment:
 
 ---
 
-## 🧪 Testing
+## What You Can Actually Use This For
 
-### 1. Verify Telemetry Collection
+1. **Learning:**
+   - How real EDR systems collect and store endpoint data
+   - How to build a detection pipeline (collect → analyze → alert)
+   - Full-stack architecture (agent, API, database, dashboard)
+   - Docker containerization and orchestration
 
-```bash
-# Check if data is flowing into the database
-docker exec edr-postgres-1 psql -U postgres -d edr -c "SELECT * FROM telemetry LIMIT 5;"
-```
+2. **Portfolio:**
+   - Shows you can ship a complete system (not just a script)
+   - Demonstrates understanding of security monitoring concepts
+   - Proves you can work across frontend, backend, database, infrastructure
 
-Expected output:
-```
- id |          hostname          | timestamp | cpu_percent | memory_percent
-----+----------------------------+-----------+-------------+----------------
-  1 | kripesh-IdeaPad-Slim-3-15  | 2026-06-20 | 12.5        | 48.3
-  2 | kripesh-IdeaPad-Slim-3-15  | 2026-06-20 | 10.2        | 47.8
-```
-
-### 2. Test File Modification Alert
-
-```bash
-# Modify a monitored file
-sudo touch /etc/hosts
-
-# Check dashboard or API
-curl http://localhost:8000/alerts
-
-# Should see: FILE_MODIFIED alert with details about the changed file
-```
-
-### 3. Test Resource Spike Alert
-
-```bash
-# Spike CPU usage
-stress --cpu 1 --timeout 30s  # (requires: apt install stress)
-
-# Check dashboard
-# Should see: CPU_HIGH alert when CPU exceeds 90%
-```
-
-### 4. Test Failed Login Alert
-
-```bash
-# Attempt SSH with wrong password (5+ times)
-ssh invalid_user@localhost
-
-# Check dashboard or API
-curl http://localhost:8000/alerts | grep BRUTE_FORCE
-```
+3. **Interview Prep:**
+   - Talk through how you'd scale to 10,000 endpoints (WebSocket updates, agent service, distributed storage)
+   - Explain your detection logic and why you chose those thresholds
+   - Discuss limitations and how you'd fix them in a production system
 
 ---
 
-## 📊 Example Workflow
+## Known Limitations
 
-1. **Start the stack**: `docker-compose up --build` (terminal 1)
-2. **Start the agent**: `python agent.py` (terminal 2)
-3. **Open dashboard**: http://localhost:3000
-4. **Monitor in real-time**: CPU, memory, disk, processes update every 5 seconds
-5. **Trigger an alert**: Modify `/etc/passwd` or spike CPU
-6. **See alert immediately**: Dashboard shows new security alert with severity
-7. **Investigate**: Click on alert to see details, check affected host, review process list
-
----
-
-## ⚠️ Limitations
-
-**This is a learning project, not production software.**
-
-- **No real-time updates** — Dashboard uses polling, not WebSockets. 2-5 second delay vs. true real-time.
-- **Agent requires manual execution** — No persistent background agent or systemd service yet.
-- **Basic detection rules** — Threshold-based only, no ML/anomaly detection. Easy to evade with slow attacks.
-- **No persistence rotation** — Alert log grows indefinitely; no cleanup or archival.
-- **Minimal authentication** — Basic JWT token validation, no RBAC or advanced access control.
-- **Single-agent testing only** — Multi-agent management not fully tested.
-- **Linux-only agent** — Collects from `/var/log/auth.log`, `ps`, `netstat` (Linux tools).
-- **No encryption in transit** — HTTP only, no TLS/SSL yet.
+- **Polling, not real-time:** Dashboard updates every 2-5 seconds, not instant
+- **Agent is manual:** Must run `python agent.py` each time; no systemd service
+- **Single-host tested:** Schema supports multiple hosts; not extensively tested at scale
+- **No encryption:** HTTP only; no TLS between agent and backend
+- **Basic auth:** JWT tokens generated but not strictly validated on every request
+- **No alert cleanup:** Database grows indefinitely; no archival policy
+- **Linux only:** Agent uses `ps`, `netstat`, `/var/log/auth.log`
+- **Basic detection:** Threshold-based rules only; no machine learning or statistical anomaly detection
+- **No response automation:** Alerts are informational only; no auto-remediation
 
 ---
 
-## 🚀 Future Improvements
+## Links
 
-- Real-time WebSocket updates for instant alert notifications
-- Background agent service (systemd or Docker-based persistent agent)
-- Advanced anomaly detection (statistical, behavioral, ML-based)
-- Role-based access control (RBAC) for multi-user dashboards
-- Cloud deployment (AWS/GCP/Azure infrastructure)
-- Alert response automation (auto-isolate hosts, kill processes, etc.)
-- Multi-platform agent (Windows, macOS support)
-- TLS/encrypted communication between agent and backend
-- Alert archival and log rotation
-- Integration with SIEM platforms (Elasticsearch, Splunk)
-
----
-
-## 🏆 What This Demonstrates
-
-This project shows:
-- **Full-stack development**: Backend (Python/FastAPI), frontend (React), database (PostgreSQL)
-- **Real-world security concepts**: Telemetry collection, anomaly detection, alerting
-- **Systems programming**: Process monitoring, network introspection, file hashing
-- **DevOps**: Docker containerization, multi-service orchestration
-- **API design**: RESTful endpoints, data validation (Pydantic), structured responses
-- **Database design**: Relational schema for time-series security data
-
----
-
-## 📝 Author
-
-**Kripesh Khatiwada**  
-Cybersecurity Student | Blue Team | Endpoint Detection Systems
-
----
-
-## 📄 License
-
-MIT License (or your choice of license)
-
----
-
-## 🔗 Links
-
-- **GitHub**: https://github.com/KripeshKhatiwada/EDR
-- **Dashboard**: http://localhost:3000 (when running)
-- **API Docs**: http://localhost:8000/docs (when running)
+- **GitHub:** https://github.com/KripeshKhatiwada/EDR
+- **Dashboard (running locally):** http://localhost:3000
+- **API Docs (running locally):** http://localhost:8000/docs
+- **Portfolio:** kripeshkhatiwada.github.io/portfolio-kripesh
